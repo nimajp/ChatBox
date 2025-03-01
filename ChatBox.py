@@ -1,50 +1,65 @@
 import socket
+import threading
 import tkinter as tk
 from tkinter import scrolledtext
 
-# Create socket for client and connect to the server
-# Replace 'Your_Public_IP' with the actual public IP of the server
+# Client setup
+SERVER_IP = "192.168.113.62"
+PORT = 12345
+
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(('Server IPv4', 12345))  # Server IP address and port
+client.connect((SERVER_IP, PORT))
 
-# Function to send message to the server
-def send_message():
-    message = entry.get()  # Get message from text entry
+# Function to send messages continuously
+def send_message(event=None):
+    message = message_entry.get().strip()
     if message:
-        chat_box.config(state=tk.NORMAL)  # Enable chat box to add text
-        chat_box.insert(tk.END, "You: " + message + '\n')  # Add message to chat box
-        entry.delete(0, tk.END)  # Clear text entry after sending message
-        chat_box.config(state=tk.DISABLED)  # Disable chat box to prevent manual typing
+        try:
+            client.send(message.encode("utf-8"))
+            chat_box.config(state=tk.NORMAL)
+            chat_box.insert(tk.END, f"You: {message}\n", "user_message")
+            chat_box.config(state=tk.DISABLED)
+            chat_box.yview(tk.END)  # Auto scroll
+            message_entry.delete(0, tk.END)  # Clear input after sending
+        except:
+            chat_box.insert(tk.END, "Error sending message!\n", "error_message")
 
-        # Send message to the server
-        client.send(message.encode())
+# Function to receive messages in a loop
+def receive_messages():
+    while True:
+        try:
+            message = client.recv(1024).decode("utf-8")
+            if message:
+                chat_box.config(state=tk.NORMAL)
+                chat_box.insert(tk.END, f"Friend: {message}\n", "friend_message")
+                chat_box.config(state=tk.DISABLED)
+                chat_box.yview(tk.END)  # Auto scroll
+        except:
+            break  # Stop the loop if the connection is closed
 
-        # Receive the server's response
-        response = client.recv(1024).decode()
-        chat_box.config(state=tk.NORMAL)
-        chat_box.insert(tk.END, "Server: " + response + '\n')  # Show server response
-        chat_box.config(state=tk.DISABLED)
-
-        chat_box.yview(tk.END)  # Auto-scroll to the latest message
-
-# Create main window for GUI
+# GUI setup
 root = tk.Tk()
-root.title("Chat with Server")
+root.title("Chat Box")
 
-# Create chat box (ScrolledText for scrollable area)
-chat_box = scrolledtext.ScrolledText(root, width=50, height=15, wrap=tk.WORD, state=tk.DISABLED)
-chat_box.pack(pady=10)
+chat_box = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=50, height=20, state=tk.DISABLED)
+chat_box.pack(padx=10, pady=10)
 
-# Create text entry for typing messages
-entry = tk.Entry(root, width=40)
-entry.pack(pady=5)
+message_frame = tk.Frame(root)
+message_frame.pack(pady=5)
 
-# Create button to send the message
-send_button = tk.Button(root, text="Send", command=send_message)
-send_button.pack(pady=5)
+message_entry = tk.Entry(message_frame, width=40)
+message_entry.pack(side=tk.LEFT, padx=5)
+message_entry.bind("<Return>", send_message)  # Press "Enter" to send
 
-# Start the GUI loop
+send_button = tk.Button(message_frame, text="Send", command=send_message)
+send_button.pack(side=tk.RIGHT, padx=5)
+
+# Adding styles
+chat_box.tag_configure("user_message", foreground="blue")
+chat_box.tag_configure("friend_message", foreground="green")
+chat_box.tag_configure("error_message", foreground="red")
+
+# Start receiving messages in a separate thread
+threading.Thread(target=receive_messages, daemon=True).start()
+
 root.mainloop()
-
-# Close client connection after exiting
-client.close()
